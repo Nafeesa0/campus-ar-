@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Campus Guide</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
+    #map { height: 100%; width: 100%; }
+
+    .bar {
+      position: absolute; z-index: 1000;
+      left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      display: flex; gap: 8px; align-items: center;
+      background: #fff; color: #1a1a1a;
+      padding: 10px 12px; border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.25);
+    }
+    .bar span { flex: 1; font-size: 14px; }
+    .bar button {
+      border: 0; border-radius: 8px; padding: 8px 12px;
+      background: #1565c0; color: #fff; font-size: 14px; cursor: pointer;
+    }
+    .bar button:focus-visible { outline: 3px solid #90caf9; outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="bar">
+    <span id="status">Finding your location…</span>
+    <button id="recenter" type="button">Recenter</button>
+  </div>
+
+  <script>
+    // Fallback centre (Thiruvananthapuram) until the first GPS fix arrives.
+    // Replace with your campus coordinates later.
+    const FALLBACK = [8.5241, 76.9366];
+
+    const map = L.map("map", { zoomControl: true }).setView(FALLBACK, 16);
+
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    const statusEl = document.getElementById("status");
+    let userMarker = null;
+    let accuracyCircle = null;
+    let follow = true; // map follows the user until they drag it
+
+    map.on("dragstart", () => { follow = false; });
+
+    document.getElementById("recenter").addEventListener("click", () => {
+      follow = true;
+      if (userMarker) map.setView(userMarker.getLatLng(), Math.max(map.getZoom(), 18));
+    });
+
+    function onPosition(pos) {
+      const { latitude, longitude, accuracy } = pos.coords;
+      const latlng = [latitude, longitude];
+
+      if (!userMarker) {
+        userMarker = L.circleMarker(latlng, {
+          radius: 8, color: "#fff", weight: 3,
+          fillColor: "#1565c0", fillOpacity: 1
+        }).addTo(map);
+        accuracyCircle = L.circle(latlng, {
+          radius: accuracy, color: "#1565c0", weight: 1, fillOpacity: 0.1
+        }).addTo(map);
+        map.setView(latlng, 18);
+      } else {
+        userMarker.setLatLng(latlng);
+        accuracyCircle.setLatLng(latlng).setRadius(accuracy);
+        if (follow) map.panTo(latlng);
+      }
+
+      statusEl.textContent = "Location accuracy: about " + Math.round(accuracy) + " m";
+    }
+
+    function onError(err) {
+      const messages = {
+        1: "Location permission denied. Allow location access in your browser settings.",
+        2: "Location unavailable. Move to an open area and try again.",
+        3: "Location request timed out. Trying again…"
+      };
+      statusEl.textContent = messages[err.code] || "Could not get your location.";
+    }
+
+    if ("geolocation" in navigator) {
+      navigator.geolocation.watchPosition(onPosition, onError, {
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+        timeout: 15000
+      });
+    } else {
+      statusEl.textContent = "This browser does not support location.";
+    }
+  </script>
+</body>
+</html>
